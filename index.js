@@ -34,7 +34,7 @@ app.use(async (req, res, next) => {
 });
 
 // =============================================================
-//  কোড লেখার সময় req.db.collectionName ব্যবহার করা যাবে
+//  কোড লেখার সময় req.db.collectionName diye likhbo
 // =============================================================
 
 // =============================================================
@@ -49,6 +49,7 @@ app.post('/api/books', async (req, res) => {
             ...bookData,
             fee: Number(bookData.fee) || 0,
             status: "Pending Approval",
+            requests: 0,
             createdAt: new Date()
         };
         const result = await req.db.books.insertOne(finalBookObj);
@@ -60,7 +61,16 @@ app.post('/api/books', async (req, res) => {
     }
 });
 
+// librarian Id diye books get korche
+app.get('/api/books', async (req, res) => {
+    const query = {}
+    if (req.query.librarianId) {
+        query.librarianId = req.query.librarianId;
+    }
+    const result = await req.db.books.find(query).toArray();
+    res.json(result);
 
+})
 
 
 
