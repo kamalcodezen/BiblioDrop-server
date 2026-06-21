@@ -135,6 +135,34 @@ app.patch('/api/books/edit/:id', async (req, res) => {
 });
 
 
+// librarian book Delete by id
+app.delete('/api/books/delete/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await req.db.books.deleteOne({ _id: new ObjectId(id) });
+
+        if (result.deletedCount === 1) {
+            res.json({
+                success: true,
+                message: "Book has been successfully wiped from inventory!",
+                result
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                message: "Book not found or already deleted from the system."
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+});
+
+
+
 
 // =======================================================================
 
