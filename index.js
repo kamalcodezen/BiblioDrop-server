@@ -202,7 +202,34 @@ app.get('/api/books/pendingBooks', async (req, res) => {
     }
 })
 
+// admin  approve pending book status by id
+app.patch('/api/books/approveStatus/:id', async (req, res) => {
 
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        const targetStatus = "Published";
+
+        const result = await req.db.books.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status: targetStatus } }
+        )
+        res.json({
+            success: true,
+            message: `Book status successfully updated to ${targetStatus}! `,
+            result
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+
+
+
+})
 
 
 
