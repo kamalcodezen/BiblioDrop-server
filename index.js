@@ -44,6 +44,25 @@ app.use(async (req, res, next) => {
 //             Books Api feature
 // =============================================================
 
+// Get all published books
+app.get("/api/books/publishedBooks", async (req, res) => {
+    try {
+        const result = await req.db.books
+            .find({ status: "Published" })
+            .toArray();
+
+        res.json({
+            success: true,
+            data: result,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error",
+        });
+    }
+});
+
 // librarian book post korche 
 app.post('/api/books', async (req, res) => {
     try {
