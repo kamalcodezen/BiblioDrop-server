@@ -44,17 +44,14 @@ app.use(async (req, res, next) => {
 //             Books Api feature
 // =============================================================
 
-// Get all published books
+// all books get korche by status
 app.get("/api/books/publishedBooks", async (req, res) => {
     try {
         const result = await req.db.books
             .find({ status: "Published" })
             .toArray();
+        res.json(result);
 
-        res.json({
-            success: true,
-            data: result,
-        });
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -62,6 +59,15 @@ app.get("/api/books/publishedBooks", async (req, res) => {
         });
     }
 });
+
+// book details by id 
+app.get('/api/books/details/:id', async (req, res) => {
+    const { id } = req.params;
+    const result = await req.db.books.findOne({ _id: new ObjectId(id) });
+    res.json(result);
+
+})
+
 
 // librarian book post korche 
 app.post('/api/books', async (req, res) => {
