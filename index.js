@@ -68,6 +68,7 @@ app.get('/api/books/details/:id', async (req, res) => {
 
 })
 
+// =================== Librarian =====================
 
 // librarian book post korche 
 app.post('/api/books', async (req, res) => {
@@ -185,6 +186,33 @@ app.delete('/api/books/delete/:id', async (req, res) => {
         });
     }
 });
+
+// ================== Admin ================
+
+// admin gets all pending books
+app.get('/api/books/pendingBooks', async (req, res) => {
+    try {
+        const result = await req.db.books.find({ status: "Pending Approval" }).toArray();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+})
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
