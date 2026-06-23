@@ -188,6 +188,20 @@ app.delete('/api/books/delete/:id', async (req, res) => {
 
 // ================== Admin ================
 
+// admin all books get
+app.get('/api/books/allBooks', async (req, res) => {
+    try {
+        const result = await req.db.books.find({}).toArray();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+})
+
+
 // admin gets all pending books
 app.get('/api/books/pendingBooks', async (req, res) => {
     try {
@@ -230,6 +244,7 @@ app.patch('/api/books/approveStatus/:id', async (req, res) => {
 
 })
 
+//================== Users =====================
 
 // user role update (admin)
 app.patch('/api/users/updateRole/:id', async (req, res) => {
@@ -253,7 +268,6 @@ app.patch('/api/users/updateRole/:id', async (req, res) => {
     }
 })
 
-//================== Users =====================
 
 // user er sob data get korchi joto user ache tader list
 app.get("/api/users", async (req, res) => {
