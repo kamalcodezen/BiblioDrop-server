@@ -27,6 +27,7 @@ app.use(async (req, res, next) => {
         req.db = {
             books: db.collection("books"),
             users: db.collection("user"),
+            comments: db.collection("comments")
         };
 
         next();
@@ -286,13 +287,9 @@ app.patch('/api/books/updateStatus/:id', async (req, res) => {
 
 
 
-
-
-
-
 //================== Users =====================
 
-// user role update (admin)
+// user role update by admin
 app.patch('/api/users/updateRole/:id', async (req, res) => {
     const { id } = req.params
     const { userRole } = req.body
@@ -347,7 +344,7 @@ app.get("/api/users", async (req, res) => {
 });
 
 
-// user delete by id (admin)
+// user delete by admin
 app.delete('/api/users/delete/:id', async (req, res) => {
     const { id } = req.params
     try {
@@ -365,7 +362,21 @@ app.delete('/api/users/delete/:id', async (req, res) => {
     }
 })
 
+// user comments add post
+app.post('/api/comments/add', async (req, res) => {
+    try {
+        const data = req.body;
+        const result = await req.db.comments.insertOne(data);
+        res.json(result);
 
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+})
 
 
 
