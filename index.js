@@ -27,7 +27,7 @@ app.use(async (req, res, next) => {
         req.db = {
             // books: db.collection("books"),
             books: db.collection("books"),
-
+            users: db.collection("user"),
         };
 
         next();
@@ -232,7 +232,38 @@ app.patch('/api/books/approveStatus/:id', async (req, res) => {
 })
 
 
+//================== Users =====================
 
+// user er sob data get korchi joto user ache tader list
+app.get("/api/users", async (req, res) => {
+    try {
+        const userCollection = await req.db.users;
+
+        const users = await userCollection
+            .find({})
+            .project({
+                password: 0,
+                salt: 0,
+                hashedPassword: 0,
+                textPassword: 0
+            })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.status(200).json({
+            success: true,
+            count: users.length,
+            users: users,
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Internal Server Error. Failed to fetch user collection.",
+            error: error.message,
+        });
+    }
+});
 
 
 
