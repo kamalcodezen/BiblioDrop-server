@@ -231,6 +231,28 @@ app.patch('/api/books/approveStatus/:id', async (req, res) => {
 })
 
 
+// user role update (admin)
+app.patch('/api/users/updateRole/:id', async (req, res) => {
+    const { id } = req.params
+    const { userRole } = req.body
+    try {
+        const result = await req.db.users.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { role: userRole } }
+        )
+        res.json({
+            success: true,
+            message: `User role successfully updated to ${userRole}!`,
+            result
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+})
+
 //================== Users =====================
 
 // user er sob data get korchi joto user ache tader list
@@ -265,20 +287,14 @@ app.get("/api/users", async (req, res) => {
 });
 
 
-
-// user role update (admin)
-app.patch('/api/users/updateRole/:id', async (req, res) => {
-
+// user delete by id (admin)
+app.delete('/api/users/delete/:id', async (req, res) => {
     const { id } = req.params
-    const { userRole } = req.body
     try {
-        const result = await req.db.users.updateOne(
-            { _id: new ObjectId(id) },
-            { $set: { role: userRole } }
-        )
+        const result = await req.db.users.deleteOne({ _id: new ObjectId(id) })
         res.json({
             success: true,
-            message: `User role successfully updated to ${userRole}! `,
+            message: `User has been successfully deleted!`,
             result
         });
     } catch (error) {
@@ -288,6 +304,9 @@ app.patch('/api/users/updateRole/:id', async (req, res) => {
         });
     }
 })
+
+
+
 
 
 
