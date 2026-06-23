@@ -25,7 +25,6 @@ app.use(async (req, res, next) => {
 
         //   কালেকশনগুলো এখানে ডিফাইন করা হলো
         req.db = {
-            // books: db.collection("books"),
             books: db.collection("books"),
             users: db.collection("user"),
         };
@@ -265,6 +264,30 @@ app.get("/api/users", async (req, res) => {
     }
 });
 
+
+
+// user role update (admin)
+app.patch('/api/users/updateRole/:id', async (req, res) => {
+
+    const { id } = req.params
+    const { userRole } = req.body
+    try {
+        const result = await req.db.users.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { role: userRole } }
+        )
+        res.json({
+            success: true,
+            message: `User role successfully updated to ${userRole}! `,
+            result
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+})
 
 
 
