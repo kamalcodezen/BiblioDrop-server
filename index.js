@@ -469,14 +469,14 @@ app.delete('/api/users/comments/delete/:id', async (req, res) => {
 
 
 //================== payments =====================
-
+// paymentData post korlam mane payments collection 
 app.post('/api/payments', async (req, res) => {
-
-
-
-
     try {
         const { sessionId, bookId, bookTitle, bookCover, userId, userEmail, librarianId, librarianEmail, amount } = req.body;
+        // current month name
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const currentMonth = monthNames[new Date().getMonth()]; 
+
         const paymentData = {
             transactionId: sessionId,
             bookId,
@@ -487,6 +487,7 @@ app.post('/api/payments', async (req, res) => {
             librarianId,
             librarianEmail,
             amount,
+            month: currentMonth,
             status: "Pending",
             createdAt: new Date()
         }
@@ -521,6 +522,19 @@ app.post('/api/payments', async (req, res) => {
 })
 
 
+// user payments data get by userId
+app.get('/api/payments/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await req.db.payments.find({ userId: id }).toArray();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+})
 
 
 
