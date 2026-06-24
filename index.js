@@ -400,6 +400,32 @@ app.get('/api/users/comments/:userId', async (req, res) => {
 })
 
 
+//  User comment edit/update by commentId
+app.patch('/api/users/comments/edit/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { comment } = req.body;
+
+        const result = await req.db.comments.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { comment: comment, updatedAt: new Date() } }
+        );
+
+        res.json({
+            success: true,
+            message: "Comment updated successfully in database!",
+            result
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error during comment update"
+        });
+    }
+});
+
+
 
 
 
