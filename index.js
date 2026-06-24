@@ -475,7 +475,7 @@ app.post('/api/payments', async (req, res) => {
         const { sessionId, bookId, bookTitle, bookCover, userId, userEmail, librarianId, librarianEmail, amount } = req.body;
         // current month name
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const currentMonth = monthNames[new Date().getMonth()]; 
+        const currentMonth = monthNames[new Date().getMonth()];
 
         const paymentData = {
             transactionId: sessionId,
@@ -523,10 +523,10 @@ app.post('/api/payments', async (req, res) => {
 
 
 // user payments data get by userId
-app.get('/api/payments/:id', async (req, res) => {
-    const { id } = req.params;
+app.get('/api/payments/:email', async (req, res) => {
+    const { email } = req.params;
     try {
-        const result = await req.db.payments.find({ userId: id }).toArray();
+        const result = await req.db.payments.find({ userEmail: email }).sort({ createdAt: -1 }).toArray();
         res.json(result);
     } catch (error) {
         res.status(500).json({
