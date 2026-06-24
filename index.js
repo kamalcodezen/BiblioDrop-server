@@ -9,21 +9,18 @@ const { getDb } = require('./db');
 const app = express();
 const port = process.env.PORT || 8000;
 
-
 app.use(cors({
     origin: ["http://localhost:3000"],
     credentials: true
 }));
 app.use(express.json());
 
-
-
-//  ডাটাবেজ কালেকশন মিডেলওয়্যার (প্রতি রিকোয়েস্টে অটো কালেকশন ইনজেক্ট করবে)
+// ডাটাবেজ কালেকশন মিডেলওয়্যার (প্রতি রিকোয়েস্টে অটো কালেকশন ইনজেক্ট করবে)
 app.use(async (req, res, next) => {
     try {
         const db = await getDb();
 
-        //   কালেকশনগুলো এখানে ডিফাইন করা হলো
+        // কালেকশনগুলো এখানে ডিফাইন করা হলো
         req.db = {
             books: db.collection("books"),
             users: db.collection("user"),
@@ -38,11 +35,7 @@ app.use(async (req, res, next) => {
 });
 
 // =============================================================
-//  কোড লেখার সময় req.db.collectionName diye likhbo
-// =============================================================
-
-// =============================================================
-//             Books Api feature
+//                      Books Api feature
 // =============================================================
 
 // db te // all books get korche by status (Published & Checked Out)
@@ -69,8 +62,7 @@ app.get('/api/books/details/:id', async (req, res) => {
     const { id } = req.params;
     const result = await req.db.books.findOne({ _id: new ObjectId(id) });
     res.json(result);
-
-})
+});
 
 // =================== Librarian =====================
 
@@ -96,14 +88,13 @@ app.post('/api/books', async (req, res) => {
 
 // librarian Id diye books get korche
 app.get('/api/books', async (req, res) => {
-    const query = {}
+    const query = {};
     if (req.query.librarianId) {
         query.librarianId = req.query.librarianId;
     }
     const result = await req.db.books.find(query).toArray();
     res.json(result);
-
-})
+});
 
 // librarian all books status change 
 app.patch('/api/books/:id', async (req, res) => {
@@ -136,11 +127,7 @@ app.patch('/api/books/edit/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const bookData = req.body;
-
-        // req.body থেকে যদি কোনোভাবে _id আসে, সেটা ডিলিট করে দেওয়া হলো
-        // কারণ মঙ্গোডিবিতে এক্সিস্টিং ডকুমেন্টের _id চেঞ্জ বা $set করা নিষিদ্ধ
         delete bookData._id;
-
 
         if (bookData.fee) {
             bookData.fee = Number(bookData.fee) || 0;
@@ -163,7 +150,6 @@ app.patch('/api/books/edit/:id', async (req, res) => {
         });
     }
 });
-
 
 // librarian book Delete by id
 app.delete('/api/books/delete/:id', async (req, res) => {
@@ -208,8 +194,7 @@ app.get('/api/books/allBooks', async (req, res) => {
             message: error.message || "Internal Server Error"
         });
     }
-})
-
+});
 
 // admin gets all pending books
 app.get('/api/books/pendingBooks', async (req, res) => {
@@ -222,21 +207,18 @@ app.get('/api/books/pendingBooks', async (req, res) => {
             message: error.message || "Internal Server Error"
         });
     }
-})
+});
 
-// admin  approve pending book status by id
+// admin approve pending book status by id
 app.patch('/api/books/approveStatus/:id', async (req, res) => {
-
     try {
         const { id } = req.params;
-        const { status } = req.body;
-
         const targetStatus = "Published";
 
         const result = await req.db.books.updateOne(
             { _id: new ObjectId(id) },
             { $set: { status: targetStatus } }
-        )
+        );
         res.json({
             success: true,
             message: `Book status successfully updated to ${targetStatus}! `,
@@ -248,19 +230,13 @@ app.patch('/api/books/approveStatus/:id', async (req, res) => {
             message: error.message || "Internal Server Error"
         });
     }
-
-
-
-})
-
+});
 
 // admin book status check kore status update korbe (publish/unpublish)
 app.patch('/api/books/updateStatus/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-
-        // check korci jodi na thake thale amar frontend thke jeta sche oita set kore dao 
         const targetStatus = ["Unpublished", "Published"];
 
         if (!targetStatus.includes(status)) {
@@ -269,12 +245,11 @@ app.patch('/api/books/updateStatus/:id', async (req, res) => {
 
         const result = await req.db.books.updateOne(
             { _id: new ObjectId(id) },
-
             { $set: { status: status } }
         );
         res.json({
             success: true,
-            message: `Book status successfully updated to ${targetStatus}!`,
+            message: `Book status successfully updated to ${status}!`,
             result
         });
     } catch (error) {
@@ -283,25 +258,19 @@ app.patch('/api/books/updateStatus/:id', async (req, res) => {
             message: error.message || "Internal Server Error"
         });
     }
-})
+});
 
-
-
-
-
-
-
-//================== Users =====================
+//================== Users / Comments Api =====================
 
 // user role update by admin
 app.patch('/api/users/updateRole/:id', async (req, res) => {
-    const { id } = req.params
-    const { userRole } = req.body
+    const { id } = req.params;
+    const { userRole } = req.body;
     try {
         const result = await req.db.users.updateOne(
             { _id: new ObjectId(id) },
             { $set: { role: userRole } }
-        )
+        );
         res.json({
             success: true,
             message: `User role successfully updated to ${userRole}!`,
@@ -313,14 +282,12 @@ app.patch('/api/users/updateRole/:id', async (req, res) => {
             message: error.message || "Internal Server Error"
         });
     }
-})
-
+});
 
 // user er sob data get korchi joto user ache tader list
 app.get("/api/users", async (req, res) => {
     try {
         const userCollection = await req.db.users;
-
         const users = await userCollection
             .find({})
             .project({
@@ -337,7 +304,6 @@ app.get("/api/users", async (req, res) => {
             count: users.length,
             users: users,
         });
-
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -349,9 +315,9 @@ app.get("/api/users", async (req, res) => {
 
 // user delete by admin
 app.delete('/api/users/delete/:id', async (req, res) => {
-    const { id } = req.params
+    const { id } = req.params;
     try {
-        const result = await req.db.users.deleteOne({ _id: new ObjectId(id) })
+        const result = await req.db.users.deleteOne({ _id: new ObjectId(id) });
         res.json({
             success: true,
             message: `User has been successfully deleted!`,
@@ -363,11 +329,10 @@ app.delete('/api/users/delete/:id', async (req, res) => {
             message: error.message || "Internal Server Error"
         });
     }
-})
+});
 
-
-// all comment get korchi book id diye
-app.get('/api/users/comments/:id', async (req, res) => {
+// বুক আইডি দিয়ে কমেন্ট গেট করার জন্য ইউআরএল পাথ আলাদা করা হলো ভাই
+app.get('/api/books/comments/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const result = await req.db.comments.find({ bookId: id }).toArray();
@@ -380,7 +345,6 @@ app.get('/api/users/comments/:id', async (req, res) => {
     }
 });
 
-
 // user comments add post
 app.post('/api/users/comments', async (req, res) => {
     try {
@@ -388,38 +352,38 @@ app.post('/api/users/comments', async (req, res) => {
         const commentData = {
             ...data,
             createdAt: new Date()
-        }
+        };
         const result = await req.db.comments.insertOne(commentData);
         res.json(result);
-
-
     } catch (error) {
         res.status(500).json({
             success: false,
             message: error.message || "Internal Server Error"
         });
     }
-})
+});
 
-// user comments get by id
+//  ইউজার আইডি দিয়ে কমেন্ট গেট করার রাউট (স্ট্রিং এবং অবজেক্ট আইডি দুটোর সেফটি চেকসহ)
 app.get('/api/users/comments/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const result = await req.db.comments.find({ userId: userId }).toArray();
+        const query = {
+            $or: [
+                { userId: userId },
+                { userId: new ObjectId(userId) }
+            ]
+        };
+        const result = await req.db.comments.find(query).toArray();
         res.json(result);
-
     } catch (error) {
         res.status(500).json({
             success: false,
             message: error.message || "Internal Server Error"
         });
     }
+});
 
-
-})
-
-
-//  User comment edit/update by commentId
+// User comment edit/update by commentId
 app.patch('/api/users/comments/edit/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -435,7 +399,6 @@ app.patch('/api/users/comments/edit/:id', async (req, res) => {
             message: "Comment updated successfully in database!",
             result
         });
-
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -446,7 +409,6 @@ app.patch('/api/users/comments/edit/:id', async (req, res) => {
 
 // User comments Delete by id
 app.delete('/api/users/comments/delete/:id', async (req, res) => {
-
     try {
         const { id } = req.params;
         const result = await req.db.comments.deleteOne({ _id: new ObjectId(id) });
@@ -461,19 +423,12 @@ app.delete('/api/users/comments/delete/:id', async (req, res) => {
             message: error.message || "Internal Server Error during comment delete"
         });
     }
-
-
-
-})
-
-
+});
 
 //================== payments =====================
-// paymentData post korlam mane payments collection 
 app.post('/api/payments', async (req, res) => {
     try {
         const { sessionId, bookId, bookTitle, bookCover, userId, userEmail, librarianId, librarianEmail, amount } = req.body;
-        // current month name
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const currentMonth = monthNames[new Date().getMonth()];
 
@@ -490,11 +445,9 @@ app.post('/api/payments', async (req, res) => {
             month: currentMonth,
             status: "Pending",
             createdAt: new Date()
-        }
+        };
 
-        const isExists = await req.db.payments.findOne({
-            transactionId: sessionId
-        });
+        const isExists = await req.db.payments.findOne({ transactionId: sessionId });
 
         if (isExists) {
             return res.status(400).json({
@@ -519,10 +472,9 @@ app.post('/api/payments', async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
-})
+});
 
-
-// user payments data get by userId
+// user payments data get by userEmail
 app.get('/api/payments/:email', async (req, res) => {
     const { email } = req.params;
     try {
@@ -534,13 +486,7 @@ app.get('/api/payments/:email', async (req, res) => {
             message: error.message || "Internal Server Error"
         });
     }
-})
-
-
-
-
-
-// =======================================================================
+});
 
 // বেস হেলথ চেক রুট
 app.get('/', (req, res) => {
@@ -554,4 +500,4 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-module.exports = app; // Vercel হোস্টিংয়ের জন্য রেডি এক্সপোর্ট
+module.exports = app;
