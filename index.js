@@ -363,10 +363,14 @@ app.delete('/api/users/delete/:id', async (req, res) => {
 })
 
 // user comments add post
-app.post('/api/comments/add', async (req, res) => {
+app.post('/api/users/comments', async (req, res) => {
     try {
         const data = req.body;
-        const result = await req.db.comments.insertOne(data);
+        const commentData = {
+            ...data,
+            createdAt: new Date()
+        }
+        const result = await req.db.comments.insertOne(commentData);
         res.json(result);
 
 
@@ -378,7 +382,22 @@ app.post('/api/comments/add', async (req, res) => {
     }
 })
 
+// user comments get by id
+app.get('/api/users/comments/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const result = await req.db.comments.find({ userId: userId }).toArray();
+        res.json(result);
 
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+
+
+})
 
 
 
