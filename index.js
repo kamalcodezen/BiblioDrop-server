@@ -425,7 +425,27 @@ app.patch('/api/users/comments/edit/:id', async (req, res) => {
     }
 });
 
+// User comments Delete by id
+app.delete('/api/users/comments/delete/:id', async (req, res) => {
 
+    try {
+        const { id } = req.params;
+        const result = await req.db.comments.deleteOne({ _id: new ObjectId(id) });
+        res.json({
+            success: true,
+            message: "Comment has been successfully deleted!",
+            result
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error during comment delete"
+        });
+    }
+
+
+
+})
 
 
 
