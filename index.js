@@ -343,7 +343,6 @@ app.get("/api/users", async (req, res) => {
     }
 });
 
-
 // user delete by admin
 app.delete('/api/users/delete/:id', async (req, res) => {
     const { id } = req.params
@@ -361,6 +360,22 @@ app.delete('/api/users/delete/:id', async (req, res) => {
         });
     }
 })
+
+
+// all comment get korchi book id diye
+app.get('/api/users/comments/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await req.db.comments.find({ bookId: id }).toArray();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+});
+
 
 // user comments add post
 app.post('/api/users/comments', async (req, res) => {
