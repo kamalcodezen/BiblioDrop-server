@@ -27,7 +27,8 @@ app.use(async (req, res, next) => {
         req.db = {
             books: db.collection("books"),
             users: db.collection("user"),
-            comments: db.collection("comments")
+            comments: db.collection("comments"),
+            payments: db.collection("payments")
         };
 
         next();
@@ -44,12 +45,15 @@ app.use(async (req, res, next) => {
 //             Books Api feature
 // =============================================================
 
-// all books get korche by status
+// db te // all books get korche by status (Published & Checked Out)
 app.get("/api/books/publishedBooks", async (req, res) => {
     try {
         const result = await req.db.books
-            .find({ status: "Published" })
+            .find({
+                status: { $in: ["Published", "Checked Out"] }
+            })
             .toArray();
+
         res.json(result);
 
     } catch (error) {
@@ -460,6 +464,46 @@ app.delete('/api/users/comments/delete/:id', async (req, res) => {
 
 
 
+})
+
+
+
+//================== payments =====================
+
+app.post('/api/payments', async (req, res) => {
+
+    try {
+        const { sessionId, bookId, bookTitle, bookCover, userId, userEmail, librarianId, librarianEmail, amount } = req.body;
+        const paymentData = {
+            transactionId: sessionId,
+            bookId,
+            bookTitle,
+            bookCover,
+            userId,
+            userEmail,
+            librarianId,
+            librarianEmail,
+            amount,
+            status: "Pending",
+            createdAt: new Date()
+        }
+
+        await req.db.payments.insertOne(paymentData);
+
+        await req.db.books.updateOne(
+            { _id: new ObjectId(bookId) },
+            { $set: { status: "Checked Out" } }
+        );
+
+        res.json({
+            success: true,
+            message: "Payment successfully created!",
+            paymentData
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 })
 
 
