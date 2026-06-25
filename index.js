@@ -588,6 +588,64 @@ app.patch('/api/payments/return/:paymentId', async (req, res) => {
 });
 
 
+// librarian delivery status update
+app.patch('/api/payments/updateStatus/:deliveryId', async (req, res) => {
+    try {
+        const { deliveryId } = req.params; 
+        const { currentStatus } = req.body; 
+
+        if (!deliveryId) {
+            return res.status(400).json({ success: false, message: "Delivery ID is required." });
+        }
+
+        //status check
+        const targetStatus = currentStatus === "Pending"
+            ? "Dispatched"
+            : currentStatus === "Dispatched"
+                ? "Delivered"
+                : currentStatus === "Delivered"
+                    ? "Return Requested"
+                    : currentStatus === "Return Requested"
+                        ? "Returned"
+                        : currentStatus;
+
+        // ডাটাবেজের payments কালেকশনে নতুন টার্গেট স্ট্যাটাসটি আপডেট করা হলো ভাই
+        const result = await req.db.payments.updateOne(
+            { _id: new ObjectId(deliveryId) }, 
+            { $set: { status: targetStatus } }
+        );
+
+        //  যদি স্ট্যাটাস ফাইনাল 'Returned' হয়ে যায়, তবে মেইন বই আবার 'Published' হবে ভাই
+        if (targetStatus === "Returned") {
+            const paymentDoc = await req.db.payments.findOne({ _id: new ObjectId(deliveryId) });
+            if (paymentDoc?.bookId) {
+                await req.db.books.updateOne(
+                    { _id: new ObjectId(paymentDoc.bookId) },
+                    { $set: { status: "Published" } } 
+                );
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Status successfully updated to ${targetStatus}!`,
+            result
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+});
+
+
+
+
+
+
+
 
 
 
