@@ -86,15 +86,39 @@ app.post('/api/books', async (req, res) => {
     }
 });
 
-// librarian Id diye books get korche
+// [FIXED] librarian Id diye books get korche - Newest First with Dual Safety Check
 app.get('/api/books', async (req, res) => {
-    const query = {};
-    if (req.query.librarianId) {
-        query.librarianId = req.query.librarianId;
+    try {
+        const { librarianId } = req.query;
+
+        //  আইডি যদি ফাঁকা বা "undefined" স্ট্রিং হিসেবে আসে তবে ডিরেক্ট খালি অ্যারে রিটার্ন 
+        if (!librarianId || librarianId === "undefined" || librarianId.trim() === "") {
+            return res.json([]);
+        }
+
+        //  আইডি স্ট্রিং হোক বা মঙ্গোডিবির ObjectId, দুই ক্যাটাগরিতেই যেন ডাটাবেজ ম্যাচ করতে পারে ভ
+        const query = {
+            $or: [
+                { librarianId: librarianId },
+                { librarianId: ObjectId.isValid(librarianId) ? new ObjectId(librarianId) : librarianId }
+            ]
+        };
+
+        const result = await req.db.books
+            .find(query)
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.json(result);
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
     }
-    const result = await req.db.books.find(query).toArray();
-    res.json(result);
 });
+
 
 // librarian all books status change 
 app.patch('/api/books/:id', async (req, res) => {
