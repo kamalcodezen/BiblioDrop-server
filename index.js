@@ -501,6 +501,27 @@ app.post('/api/payments', async (req, res) => {
     }
 });
 
+
+// Get payment history by user email
+app.get('/api/payments/user/:email', async (req, res) => {
+    const { email } = req.params;
+
+    try {
+        const result = await req.db.payments
+            .find({ userEmail: email })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.json(result);
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error",
+        });
+    }
+});
+
 // user payments data get by userEmail
 app.get('/api/payments/librarian/:email', async (req, res) => {
     try {
@@ -518,7 +539,53 @@ app.get('/api/payments/librarian/:email', async (req, res) => {
 });
 
 
+// ইউজার পেমেন্ট করা বুক রিটার্ন স্ট্যাটাস আপডেট রুট ভাই
+app.patch('/api/payments/return/:paymentId', async (req, res) => {
+    try {
+        const { paymentId } = req.params;
+        const { currentStatus } = req.body;
 
+        if (!paymentId) {
+            return res.status(400).json({ success: false, message: "Payment ID is required." });
+        }
+
+        const targetStatus = currentStatus === "Delivered"
+            ? "Return Requested"
+            : currentStatus === "Return Requested"
+                ? "Returned"
+                : currentStatus;
+
+        // status update
+        const result = await req.db.payments.updateOne(
+            { _id: new ObjectId(paymentId) },
+            { $set: { status: targetStatus } }
+        );
+
+        //  যদি স্ট্যাটাস সাকসেসফুলি 'Returned' হয়ে যায়, তবে বই আবার 'Published' হবে ভাই
+        if (targetStatus === "Returned") {
+            const paymentDoc = await req.db.payments.findOne({ _id: new ObjectId(paymentId) });
+
+            if (paymentDoc?.bookId) {
+                await req.db.books.updateOne(
+                    { _id: new ObjectId(paymentDoc.bookId) },
+                    { $set: { status: "Published" } } // বইটি লাইব্রেরির তাকে আবার পাবলিশ করা হলো
+                );
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Status successfully updated to ${targetStatus}`,
+            result
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "An unexpected internal server error occurred."
+        });
+    }
+});
 
 
 
