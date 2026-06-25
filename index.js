@@ -460,7 +460,10 @@ app.post('/api/payments', async (req, res) => {
 
         await req.db.books.updateOne(
             { _id: new ObjectId(bookId) },
-            { $set: { status: "Checked Out" } }
+            {
+                $set: { status: "Checked Out" },
+                $inc: { requests: 1 } //payment success hole rq barbe
+            }
         );
 
         res.json({
@@ -475,11 +478,13 @@ app.post('/api/payments', async (req, res) => {
 });
 
 // user payments data get by userEmail
-app.get('/api/payments/:email', async (req, res) => {
-    const { email } = req.params;
+app.get('/api/payments/librarian/:email', async (req, res) => {
     try {
-        const result = await req.db.payments.find({ userEmail: email }).sort({ createdAt: -1 }).toArray();
+        const { email } = req.params;
+
+        const result = await req.db.payments.find({ librarianEmail: email }).sort({ createdAt: -1 }).toArray();
         res.json(result);
+
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -487,6 +492,19 @@ app.get('/api/payments/:email', async (req, res) => {
         });
     }
 });
+
+
+
+
+
+
+
+
+// ===============================
+
+
+
+
 
 // বেস হেলথ চেক রুট
 app.get('/', (req, res) => {
