@@ -86,7 +86,7 @@ app.post('/api/books', async (req, res) => {
     }
 });
 
-// [FIXED] librarian Id diye books get korche - Newest First with Dual Safety Check
+//  librarian Id diye books get korche - Newest First with Dual Safety Check
 app.get('/api/books', async (req, res) => {
     try {
         const { librarianId } = req.query;
@@ -106,7 +106,6 @@ app.get('/api/books', async (req, res) => {
 
         const result = await req.db.books
             .find(query)
-            .sort({ createdAt: -1 })
             .toArray();
 
         res.json(result);
@@ -387,16 +386,15 @@ app.post('/api/users/comments', async (req, res) => {
     }
 });
 
-//  ইউজার আইডি দিয়ে কমেন্ট গেট করার রাউট (স্ট্রিং এবং অবজেক্ট আইডি দুটোর সেফটি চেকসহ)
-app.get('/api/users/comments/:userId', async (req, res) => {
-    const { userId } = req.params;
+//   book id diye comment get korchi
+app.get('/api/books/comments', async (req, res) => {
+
     try {
-        const query = {
-            $or: [
-                { userId: userId },
-                { userId: new ObjectId(userId) }
-            ]
-        };
+        const query = {}
+
+        if (req.query.bookId) {
+            query.bookId = req.query.bookId
+        }
         const result = await req.db.comments.find(query).toArray();
         res.json(result);
     } catch (error) {
@@ -406,6 +404,10 @@ app.get('/api/users/comments/:userId', async (req, res) => {
         });
     }
 });
+
+
+
+
 
 // User comment edit/update by commentId
 app.patch('/api/users/comments/edit/:id', async (req, res) => {
@@ -591,8 +593,8 @@ app.patch('/api/payments/return/:paymentId', async (req, res) => {
 // librarian delivery status update
 app.patch('/api/payments/updateStatus/:deliveryId', async (req, res) => {
     try {
-        const { deliveryId } = req.params; 
-        const { currentStatus } = req.body; 
+        const { deliveryId } = req.params;
+        const { currentStatus } = req.body;
 
         if (!deliveryId) {
             return res.status(400).json({ success: false, message: "Delivery ID is required." });
@@ -611,7 +613,7 @@ app.patch('/api/payments/updateStatus/:deliveryId', async (req, res) => {
 
         // ডাটাবেজের payments কালেকশনে নতুন টার্গেট স্ট্যাটাসটি আপডেট করা হলো ভাই
         const result = await req.db.payments.updateOne(
-            { _id: new ObjectId(deliveryId) }, 
+            { _id: new ObjectId(deliveryId) },
             { $set: { status: targetStatus } }
         );
 
@@ -621,7 +623,7 @@ app.patch('/api/payments/updateStatus/:deliveryId', async (req, res) => {
             if (paymentDoc?.bookId) {
                 await req.db.books.updateOne(
                     { _id: new ObjectId(paymentDoc.bookId) },
-                    { $set: { status: "Published" } } 
+                    { $set: { status: "Published" } }
                 );
             }
         }
