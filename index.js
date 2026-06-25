@@ -283,6 +283,69 @@ app.patch('/api/books/updateStatus/:id', async (req, res) => {
     }
 });
 
+
+
+//  অ্যাডমিন কুইক স্ট্যাটাস কাউন্ট এপিআই রুট 
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        const totalUsers = await req.db.users.countDocuments({});
+        const totalBooks = await req.db.books.countDocuments({});
+        const totalDeliveries = await req.db.payments.countDocuments({ status: "Delivered" });
+
+        // টোটাল রেভিনিউ যোগ করার জন্য মঙ্গোডিবি এগ্রিগেশন পাইপলাইন 
+        const revenueResult = await req.db.payments.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: "$amount" }
+                }
+            }
+        ]).toArray();
+
+        const totalRevenue = revenueResult[0]?.total || 0;
+
+        res.json({
+            success: true,
+            stats: { totalUsers, totalBooks, totalDeliveries, totalRevenue }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+
+// পাই-চার্টের জন্য ক্যাটেগরি অনুযায়ী বই গোনার এপিআই 
+app.get('/api/admin/book-categories', async (req, res) => {
+    try {
+       
+        const categoryData = await req.db.books.aggregate([
+            {
+                $group: {
+                    _id: "$category", 
+                    value: { $sum: 1 } 
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    name: "$_id", 
+                    value: 1
+                }
+            }
+        ]).toArray();
+
+        res.json({ success: true, categoryData });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+
+
+
+
+
+
 //================== Users / Comments Api =====================
 
 // user role update by admin
