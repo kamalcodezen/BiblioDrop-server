@@ -649,7 +649,7 @@ app.post('/api/payments', async (req, res) => {
 });
 
 // all payments data get
-app.get('/api/payments', async (req, res) => {
+app.get('/api/payments', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const result = await req.db.payments.find({}).toArray();
         res.json(result);
