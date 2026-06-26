@@ -25,7 +25,8 @@ app.use(async (req, res, next) => {
             books: db.collection("books"),
             users: db.collection("user"),
             comments: db.collection("comments"),
-            payments: db.collection("payments")
+            payments: db.collection("payments"),
+            userSessions: db.collection("session"),
         };
 
         next();
@@ -50,9 +51,43 @@ const verifyToken = async (req, res, next) => {
         return res.status(401).json({ success: false, message: "Unauthorized. No token provided." });
     }
 
-    console.log(token, "token")
+    const query = { token: token };
+    const session = await req.db.userSessions.findOne(query);
 
+    const userId = session?.userId;
 
+    const userQuery = {
+        _id: userId
+    }
+    const user = await req.db.users.findOne(userQuery);
+    
+    // set user in request Object
+    req.user = user;
+
+    next()
+}
+
+// librarian role check must be used after verifying token
+const verifyLibrarian = async (req, res, next) => {
+    if (req?.user?.role !== "librarian") {
+        return res.status(403).json({ success: false, message: "Unauthorized. Only Librarian can access this route." });
+    }
+    next()
+}
+
+// admin role check must be used after verifying token
+const verifyAdmin = async (req, res, next) => {
+    if (req?.user?.role !== "admin") {
+        return res.status(403).json({ success: false, message: "Unauthorized. Only Admin can access this route." });
+    }
+    next()
+}
+
+// user(Reader) role check must be used after verifying token
+const verifyReader = async (req, res, next) => {
+    if (req?.user?.role !== "user") {
+        return res.status(403).json({ success: false, message: "Unauthorized. Only Reader can access this route." });
+    }
     next()
 }
 
@@ -114,14 +149,12 @@ app.post('/api/books', async (req, res) => {
 });
 
 //  librarian Id diye books get korche - Newest First with Dual Safety Check
-app.get('/api/books', verifyToken, async (req, res) => {
+app.get('/api/books', verifyToken, verifyLibrarian, async (req, res) => {
     try {
         const { librarianId } = req.query;
 
-        //  আইডি যদি ফাঁকা বা "undefined" স্ট্রিং হিসেবে আসে তবে ডিরেক্ট খালি অ্যারে রিটার্ন 
-        if (!librarianId || librarianId === "undefined" || librarianId.trim() === "") {
-            return res.json([]);
-        }
+
+        console.log()
 
         //  আইডি স্ট্রিং হোক বা মঙ্গোডিবির ObjectId, দুই ক্যাটাগরিতেই যেন ডাটাবেজ ম্যাচ করতে পারে ভ
         const query = {
