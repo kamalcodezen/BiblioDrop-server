@@ -424,9 +424,10 @@ app.get('/api/admin/book-categories', async (req, res) => {
 //================== Users / Comments Api =====================
 
 // user role update by admin
-app.patch('/api/users/updateRole/:id', async (req, res) => {
+app.patch('/api/users/updateRole/:id', verifyToken, verifyAdmin, async (req, res) => {
     const { id } = req.params;
     const { userRole } = req.body;
+
     try {
         const result = await req.db.users.updateOne(
             { _id: new ObjectId(id) },
