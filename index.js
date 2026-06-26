@@ -417,11 +417,11 @@ app.delete('/api/users/delete/:id', async (req, res) => {
     }
 });
 
-// বুক আইডি দিয়ে কমেন্ট গেট করার জন্য ইউআরএল পাথ আলাদা করা হলো ভাই
-app.get('/api/books/comments/:id', async (req, res) => {
-    const { id } = req.params;
+// user আইডি দিয়ে কমেন্ট গেট করার জন্য ইউআরএল পাথ আলাদা করা হলো ভাই
+app.get('/api/books/comments/:userId', async (req, res) => {
+    const { userId } = req.params;
     try {
-        const result = await req.db.comments.find({ bookId: id }).toArray();
+        const result = await req.db.comments.find({ userId: userId }).toArray();
         res.json(result);
     } catch (error) {
         res.status(500).json({
