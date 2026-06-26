@@ -249,8 +249,8 @@ app.patch('/api/books/edit/:id', async (req, res) => {
     }
 });
 
-// librarian book Delete by id
-app.delete('/api/books/delete/:id', async (req, res) => {
+// librarian/admin --  book Delete by id
+app.delete('/api/books/delete/:id', verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
         const result = await req.db.books.deleteOne({ _id: new ObjectId(id) });
