@@ -317,18 +317,18 @@ app.get('/api/admin/stats', async (req, res) => {
 // পাই-চার্টের জন্য ক্যাটেগরি অনুযায়ী বই গোনার এপিআই 
 app.get('/api/admin/book-categories', async (req, res) => {
     try {
-       
+
         const categoryData = await req.db.books.aggregate([
             {
                 $group: {
-                    _id: "$category", 
-                    value: { $sum: 1 } 
+                    _id: "$category",
+                    value: { $sum: 1 }
                 }
             },
             {
                 $project: {
                     _id: 0,
-                    name: "$_id", 
+                    name: "$_id",
                     value: 1
                 }
             }
@@ -563,6 +563,19 @@ app.post('/api/payments', async (req, res) => {
 
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// all payments data get
+app.get('/api/payments', async (req, res) => {
+    try {
+        const result = await req.db.payments.find({}).toArray();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error",
+        });
     }
 });
 
