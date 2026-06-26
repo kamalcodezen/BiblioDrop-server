@@ -295,7 +295,7 @@ app.get('/api/books/allBooks', async (req, res) => {
 });
 
 // admin gets all pending books
-app.get('/api/books/pendingBooks', async (req, res) => {
+app.get('/api/books/pendingBooks', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const result = await req.db.books.find({ status: "Pending Approval" }).toArray();
         res.json(result);
