@@ -278,7 +278,7 @@ app.delete('/api/books/delete/:id', verifyToken, async (req, res) => {
 // ================== Admin ================
 
 // admin all books get
-app.get('/api/books/allBooks', async (req, res) => {
+app.get('/api/books/allBooks', verifyToken, async (req, res) => {
     try {
         const result = await req.db.books
             .find({})
