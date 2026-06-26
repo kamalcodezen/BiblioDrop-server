@@ -34,6 +34,33 @@ app.use(async (req, res, next) => {
     }
 });
 
+
+// Verify authorization header and extract bearer token
+const verifyToken = async (req, res, next) => {
+
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+        return res.status(401).json({ success: false, message: "Unauthorized. No token provided." });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    if (!token) {
+        return res.status(401).json({ success: false, message: "Unauthorized. No token provided." });
+    }
+
+    console.log(token, "token")
+
+
+    next()
+}
+
+
+
+
+
+
 // =============================================================
 //                      Books Api feature
 // =============================================================
@@ -87,7 +114,7 @@ app.post('/api/books', async (req, res) => {
 });
 
 //  librarian Id diye books get korche - Newest First with Dual Safety Check
-app.get('/api/books', async (req, res) => {
+app.get('/api/books', verifyToken, async (req, res) => {
     try {
         const { librarianId } = req.query;
 
@@ -119,8 +146,8 @@ app.get('/api/books', async (req, res) => {
 });
 
 
-// librarian all books status change 
-app.patch('/api/books/:id', async (req, res) => {
+// librarian id  all books status change 
+app.patch('/api/books/:id', verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { currentStatus } = req.body;
