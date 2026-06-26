@@ -662,8 +662,8 @@ app.get('/api/payments', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 
-// Get payment history by user email
-app.get('/api/payments/user/:email', async (req, res) => {
+// Get payment details/history by user email
+app.get('/api/payments/user/:email', verifyToken, verifyUser, async (req, res) => {
     const { email } = req.params;
 
     try {
@@ -682,7 +682,7 @@ app.get('/api/payments/user/:email', async (req, res) => {
     }
 });
 
-// user payments data get by userEmail
+// user payments data get by librarian userEmail
 app.get('/api/payments/librarian/:email', async (req, res) => {
     try {
         const { email } = req.params;
