@@ -1,13 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require("dotenv");
-
+const nodemailer = require("nodemailer")
 dotenv.config();
 
 const { ObjectId } = require("mongodb");
 const { getDb } = require('./db');
 const app = express();
 const port = process.env.PORT || 8000;
+
 
 app.use(cors({
     origin: [
@@ -37,6 +38,222 @@ app.use(async (req, res, next) => {
         res.status(500).json({ error: "Database connection failed via middleware" });
     }
 });
+
+
+
+// send email user welcome sms api 
+app.post("/api/send-email", async (req, res) => {
+    const { email, name, image, role } = req.body;
+    // console.log(email, name, image, role, "data");
+
+    // ১. ইমেইল পাঠানোর জন্য ভ্যালিডেশন চেক
+    if (!email || !name || !role) {
+        return res.status(400).json({ success: false, message: "Required fields are missing!" });
+    }
+
+    try {
+        // ২. নোডমেইলার ট্রান্সপোর্টার কনফিগারেশন
+        const transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+                user: process.env.USER_EMAIL,
+                pass: process.env.USER_PASSWORD,
+            },
+        });
+
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Welcome to BiblioDrop</title>
+            <style>
+                
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background-color: #fcf0de; 
+                    font-family: 'Urbanist', -apple-system, sans-serif;
+                    -webkit-font-smoothing: antialiased;
+                }
+                .wrapper {
+                    width: 100%;
+                    table-layout: fixed;
+                    background-color: #fcf0de;
+                    padding: 40px 0;
+                }
+                .main-card {
+                    max-width: 540px;
+                    margin: 0 auto;
+                    background-color: #fef7f0; /* var(--card) */
+                    border-radius: 16px;
+                    border: 1px solid #e8d5c3; /* var(--border) */
+                    box-shadow: 0 10px 30px rgba(196, 132, 74, 0.12); /* var(--shadow) */
+                    overflow: hidden;
+                }
+                .header-banner {
+                    background: linear-gradient(135deg, #c4844a 0%, #6b4226 100%);
+                    padding: 35px 32px;
+                    text-align: center;
+                }
+                .brand-logo {
+                    font-family: 'Poppins', sans-serif;
+                    color: #ffffff;
+                    font-size: 28px;
+                    font-weight: 700;
+                    letter-spacing: -0.5px;
+                    margin: 0;
+                }
+                .brand-tagline {
+                    color: #fcf0de;
+                    font-size: 12px;
+                    margin: 6px 0 0 0;
+                    letter-spacing: 1px;
+                    text-transform: uppercase;
+                    font-weight: 600;
+                }
+                .body-content {
+                    padding: 45px 35px;
+                    text-align: center;
+                }
+                .avatar-container {
+                    margin-bottom: 24px;
+                }
+                .user-avatar {
+                    width: 100px;
+                    height: 100px;
+                    border-radius: 50%;
+                    object-fit: cover;
+                    border: 4px solid #fdf3e9; /* var(--card-soft) */
+                    box-shadow: 0 8px 20px rgba(107, 66, 38, 0.15);
+                }
+                .welcome-title {
+                    font-family: 'Poppins', sans-serif;
+                    color: #2c1c10; /* var(--foreground) */
+                    font-size: 24px;
+                    font-weight: 700;
+                    margin: 0 0 10px 0;
+                }
+                .welcome-desc {
+                    color: #785a3c; /* var(--muted-foreground) */
+                    font-size: 15px;
+                    line-height: 1.6;
+                    margin: 0 0 35px 0;
+                }
+                .role-badge-container {
+                    background-color: #fdf3e9; /* var(--card-soft) */
+                    border-radius: 12px;
+                    padding: 16px 28px;
+                    display: inline-block;
+                    border: 1px solid #e8d5c3; /* var(--border) */
+                }
+                .role-label {
+                    color: #785a3c; /* var(--muted-foreground) */
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    letter-spacing: 1.5px;
+                    font-weight: 600;
+                    display: block;
+                    margin-bottom: 4px;
+                }
+                .role-value {
+                    color: #6b4226; /* var(--secondary) */
+                    font-size: 18px;
+                    font-weight: 700;
+                    display: block;
+                }
+                .footer {
+                    background-color: #fdf3e9; /* var(--sidebar) / var(--card-soft) */
+                    border-top: 1px solid #e8d5c3;
+                    padding: 24px 32px;
+                    text-align: center;
+                }
+                .footer-links {
+                    margin-bottom: 10px;
+                }
+                .footer-links a {
+                    color: #6b4226;
+                    text-decoration: none;
+                    font-size: 13px;
+                    margin: 0 10px;
+                    font-weight: 600;
+                }
+                .footer-links a:hover {
+                    color: #c4844a;
+                }
+                .footer-text {
+                    color: #785a3c;
+                    font-size: 12px;
+                    margin: 0;
+                    line-height: 1.5;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="wrapper">
+                <div class="main-card">
+                    <!-- Header banner -->
+                    <div class="header-banner">
+                        <h1 class="brand-logo">BiblioDrop</h1>
+                        <p class="brand-tagline">Your Local Library, Delivered</p>
+                    </div>
+
+                    <!-- Main body content -->
+                    <div class="body-content">
+                        <div class="avatar-container">
+                            <img src="${image ? image : 'https://i.ibb.co/default-avatar.png'}" alt="${name}" class="user-avatar" />
+                        </div>
+
+                        <h2 class="welcome-title">Welcome, ${name}!</h2>
+                        <p class="welcome-desc">
+                            Your account has been verified and fully configured within the BiblioDrop infrastructure. Get ready to experience a seamless book borrowing and delivery workflow.
+                        </p>
+
+                        <!-- Role display card -->
+                        <div class="role-badge-container">
+                            <span class="role-label">System Access Token</span>
+                            <span class="role-value">${role.toUpperCase()}</span>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="footer">
+                        <div class="footer-links">
+                            <a href="${process.env.CLIENT_URI}">Browse Books</a>
+                            <a href="${process.env.CLIENT_URI}">Dashboard</a>
+                            <a href="${process.env.CLIENT_URI}">Privacy</a>
+                        </div>
+                        <p class="footer-text">
+                            &copy; 2026 BiblioDrop Inc. All rights reserved.<br>
+                            Secured via environment credentials.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        `;
+
+        // ৪. মেইল অপশন কনফিগারেশন
+        const mailOptions = {
+            from: `"BiblioDrop" <${process.env.USER_EMAIL}>`,
+            to: email,
+            subject: `Welcome to BiblioDrop - Account Activated (${role.toUpperCase()})`,
+            html: htmlContent,
+        };
+
+        // ৫. ইমেইল পাঠানো
+        await transporter.sendMail(mailOptions);
+
+        return res.status(200).json({ success: true, message: "Premium email sent successfully!" });
+
+    } catch (error) {
+        console.error("Error sending email:", error);
+        return res.status(500).json({ success: false, message: "Failed to send email." });
+    }
+});
+
 
 
 // ================ middleware check================
@@ -886,7 +1103,7 @@ app.patch('/api/payments/updateStatus/:deliveryId', async (req, res) => {
 
 // বেস হেলথ চেক রুট
 app.get('/', (req, res) => {
-    res.send('ShelfParcel Serverless-Ready Core Engine is running active and clean!');
+    res.send('BiblioDrop Serverless-Ready Core Engine is running active and clean!');
 });
 
 // লোকাল পিসির ডেভলপমেন্ট রানার কন্ট্রোল
