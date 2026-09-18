@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require("dotenv");
-const nodemailer = require("nodemailer")
+const nodemailer = require("nodemailer");
+const { generateChatCompletion, scanBookCoverImage } = require('./aiService');
+
 dotenv.config();
 
 const { ObjectId } = require("mongodb");
@@ -17,7 +19,8 @@ app.use(cors({
     ],
     credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 // ডাটাবেজ কালেকশন মিডেলওয়্যার (প্রতি রিকোয়েস্টে অটো কালেকশন ইনজেক্ট করবে)
 app.use(async (req, res, next) => {
@@ -1100,6 +1103,93 @@ app.patch('/api/payments/updateStatus/:deliveryId', async (req, res) => {
 
 
 
+
+
+// ==========================================
+//  BiblioBot AI Chatbot Endpoint (Rate-Limit Fallback Engine)
+// ==========================================
+app.post("/api/ai/chat", async (req, res) => {
+    try {
+        const { message, history = [] } = req.body;
+
+        if (!message || typeof message !== "string" || !message.trim()) {
+            return res.status(400).json({ error: "Message is required" });
+        }
+
+        // Fetch live catalog sample from MongoDB if available
+        let catalogContext = "";
+        try {
+            if (req.db && req.db.books) {
+                const liveBooks = await req.db.books
+                    .find({ status: "Published" })
+                    .project({ title: 1, author: 1, category: 1, price: 1, fee: 1 })
+                    .limit(10)
+                    .toArray();
+
+                if (liveBooks.length > 0) {
+                    catalogContext = liveBooks
+                        .map(b => `- "${b.title}" by ${b.author} [Genre: ${b.category || 'General'}] (Delivery Fee: ${b.fee || 5})`)
+                        .join("\n");
+                }
+            }
+        } catch (dbErr) {
+            console.warn("Could not fetch catalog context:", dbErr.message);
+        }
+
+        const messages = [
+            ...history.slice(-8),
+            { role: "user", content: message.trim() }
+        ];
+
+        const result = await generateChatCompletion({
+            messages,
+            catalogContext
+        });
+
+        res.json({
+            success: true,
+            reply: result.text,
+            provider: result.provider,
+            fallbackChain: result.fallbackChain
+        });
+    } catch (error) {
+        console.error("AI Chatbot Route Error:", error);
+        res.status(500).json({
+            error: "Failed to process chat message",
+            details: error.message
+        });
+    }
+});
+
+
+// ==========================================
+// 📸 AI Book Cover Scanner Endpoint (Multimodal Vision Engine)
+// ==========================================
+app.post("/api/ai/scan-cover", async (req, res) => {
+    try {
+        const { image, mimeType } = req.body;
+
+        if (!image) {
+            return res.status(400).json({ error: "Book cover image (base64) is required" });
+        }
+
+        const result = await scanBookCoverImage({
+            base64Data: image,
+            mimeType: mimeType || "image/jpeg"
+        });
+
+        res.json({
+            success: true,
+            data: result
+        });
+    } catch (error) {
+        console.error("AI Book Cover Scanner Error:", error);
+        res.status(500).json({
+            error: "Failed to scan book cover",
+            details: error.message
+        });
+    }
+});
 
 // বেস হেলথ চেক রুট
 app.get('/', (req, res) => {
