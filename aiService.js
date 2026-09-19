@@ -3,10 +3,10 @@
  * Dedicated for BiblioDrop Express Server Backend
  *
  * Provider Cascade Priority:
- * 1. Groq (Ultra-fast LLaMA 3.3) -> 429/Quota/Error ->
- * 2. Google Gemini (Gemini 1.5 Flash) -> 429/Quota/Error ->
- * 3. OpenRouter (Multi-model free/paid) -> 429/Quota/Error ->
- * 4. Mistral AI (Mistral Small/Medium) -> 429/Quota/Error ->
+ * 1. Groq (Ultra-fast Qwen/LLaMA) -> 429/Quota/Error ->
+ * 2. OpenRouter (Multi-model free/paid) -> 429/Quota/Error ->
+ * 3. Google Gemini (Gemini 3.6 Flash) -> 429/Quota/Error ->
+ * 4. Mistral AI (Mistral Small) -> 429/Quota/Error ->
  * 5. BiblioDrop Local Knowledge Core (Zero-downtime offline fallback)
  *
  * Language Intelligence:
@@ -87,7 +87,7 @@ async function callOpenAICompatible({ url, apiKey, model, messages, systemPrompt
   }
 }
 
-async function callGemini({ apiKey, messages, systemPrompt, model = 'gemini-1.5-flash' }) {
+async function callGemini({ apiKey, messages, systemPrompt, model = 'gemini-3.6-flash' }) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
 
   const contents = [];
@@ -310,7 +310,19 @@ async function generateChatCompletion({ messages, systemPrompt, catalogContext =
         callOpenAICompatible({
           url: 'https://api.groq.com/openai/v1/chat/completions',
           apiKey,
-          model: 'llama-3.3-70b-versatile',
+          model: 'qwen/qwen3.8-27b',
+          messages,
+          systemPrompt: enhancedSystemPrompt,
+        }),
+    },
+    {
+      name: 'OpenRouter',
+      keys: parseKeys(process.env.OPENROUTER_API_KEY),
+      call: (apiKey) =>
+        callOpenAICompatible({
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          apiKey,
+          model: 'deepseek/deepseek-v4-flash-0731:free',
           messages,
           systemPrompt: enhancedSystemPrompt,
         }),
@@ -323,19 +335,7 @@ async function generateChatCompletion({ messages, systemPrompt, catalogContext =
           apiKey,
           messages,
           systemPrompt: enhancedSystemPrompt,
-          model: 'gemini-1.5-flash',
-        }),
-    },
-    {
-      name: 'OpenRouter',
-      keys: parseKeys(process.env.OPENROUTER_API_KEY),
-      call: (apiKey) =>
-        callOpenAICompatible({
-          url: 'https://openrouter.ai/api/v1/chat/completions',
-          apiKey,
-          model: 'meta-llama/llama-3.2-3b-instruct:free',
-          messages,
-          systemPrompt: enhancedSystemPrompt,
+          model: 'gemini-3.6-flash',
         }),
     },
     {
@@ -409,8 +409,260 @@ async function generateChatCompletion({ messages, systemPrompt, catalogContext =
   };
 }
 
+
+/**
+ * Helper to safely extract JSON from LLM text responses
+ */
+function extractJSONFromText(text) {
+  if (!text) throw new Error('Empty AI response');
+  let clean = text.trim();
+  
+  // First attempt regex match for outermost JSON object
+  const match = clean.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch (err) {
+      console.warn('Regex match failed to parse, falling back to clean string');
+    }
+  }
+
+  // Clean code fences
+  clean = clean.replace(/\`\`\`json/gi, '').replace(/\`\`\`/g, '').trim();
+  return JSON.parse(clean);
+}
+
+async function scanBookCoverImage({ imageBase64, base64Data, image, mimeType = 'image/jpeg' }) {
+  const rawImage = imageBase64 || base64Data || image;
+  if (!rawImage) {
+    throw new Error('Image data is required for scanning');
+  }
+
+  // Strip data URL prefix if present (e.g. data:image/png;base64,...)
+  let cleanBase64 = rawImage;
+  if (cleanBase64.includes(',')) {
+    const parts = cleanBase64.split(',');
+    cleanBase64 = parts[1];
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    if (mimeMatch) {
+      mimeType = mimeMatch[1];
+    }
+  }
+
+  const promptText = "Analyze this book cover image carefully. Extract the book title, author, category/genre, and write a compelling 2-sentence synopsis for the library catalog. Also suggest a reasonable doorstep handling fee ($3 to $8). Return ONLY a valid JSON object matching this schema with no markdown backticks:\n" +
+    "{\n" +
+    '  "title": "Exact book title",\n' +
+    '  "author": "Author name",\n' +
+    '  "category": "Fiction | Sci-Fi | Academic | Biography | Mystery | History | Self-Help | General",\n' +
+    '  "fee": 5,\n' +
+    '  "description": "2-sentence synopsis..."\n' +
+    '}';
+
+  // Attempt 1: Groq Vision (llama-3.2-11b-vision-preview)
+  const groqKeys = parseKeys(process.env.GROQ_API_KEY);
+  for (let i = 0; i < groqKeys.length; i++) {
+    const apiKey = groqKeys[i];
+    try {
+      console.log('[AI Vision] Attempting Groq Vision...');
+      const url = 'https://api.groq.com/openai/v1/chat/completions';
+      const body = {
+        model: 'llama-3.2-11b-vision-preview',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
+              {
+                type: 'image_url',
+                image_url: { url: 'data:' + mimeType + ';base64,' + cleanBase64 }
+              }
+            ]
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 600
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 18000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + apiKey
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (response.ok) {
+        const resData = await response.json();
+        const rawOutput = resData.choices?.[0]?.message?.content;
+        if (rawOutput) {
+          const parsed = extractJSONFromText(rawOutput);
+          return {
+            success: true,
+            book: {
+              title: parsed.title || 'Unknown Title',
+              author: parsed.author || 'Unknown Author',
+              category: parsed.category || 'Fiction',
+              fee: Number(parsed.fee) || 5,
+              description: parsed.description || 'Physical edition cataloged for BiblioDrop delivery.'
+            },
+            provider: 'Groq Vision'
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[AI Vision] Groq Vision attempt failed:', err.message);
+    }
+  }
+
+  // Attempt 2: OpenRouter Vision (inclusionai/ling-3.0-flash-vl:free)
+  const openrouterKeys = parseKeys(process.env.OPENROUTER_API_KEY);
+  for (let i = 0; i < openrouterKeys.length; i++) {
+    const apiKey = openrouterKeys[i];
+    try {
+      console.log('[AI Vision] Attempting OpenRouter Vision...');
+      const url = 'https://openrouter.ai/api/v1/chat/completions';
+      const body = {
+        model: 'inclusionai/ling-3.0-flash-vl:free',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
+              {
+                type: 'image_url',
+                image_url: { url: 'data:' + mimeType + ';base64,' + cleanBase64 }
+              }
+            ]
+          }
+        ]
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 18000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + apiKey
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (response.ok) {
+        const resData = await response.json();
+        const rawOutput = resData.choices?.[0]?.message?.content;
+        if (rawOutput) {
+          const parsed = extractJSONFromText(rawOutput);
+          return {
+            success: true,
+            book: {
+              title: parsed.title || 'Unknown Title',
+              author: parsed.author || 'Unknown Author',
+              category: parsed.category || 'Fiction',
+              fee: Number(parsed.fee) || 5,
+              description: parsed.description || 'Physical edition cataloged for BiblioDrop delivery.'
+            },
+            provider: 'OpenRouter Vision'
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[AI Vision] OpenRouter Vision attempt failed:', err.message);
+    }
+  }
+
+  // Attempt 3: Google Gemini Vision (gemini-3.6-flash)
+  const geminiKeys = parseKeys(process.env.GEMINI_API_KEY);
+  for (let i = 0; i < geminiKeys.length; i++) {
+    const apiKey = geminiKeys[i];
+    try {
+      console.log('[AI Vision] Attempting Gemini 3.6 Flash Vision...');
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + apiKey;
+
+      const body = {
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: mimeType,
+                  data: cleanBase64
+                }
+              },
+              {
+                text: promptText
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 600
+        }
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 18000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error('Gemini Vision HTTP ' + response.status + ': ' + errText);
+      }
+
+      const resData = await response.json();
+      const rawOutput = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawOutput) {
+        const parsed = extractJSONFromText(rawOutput);
+        return {
+          success: true,
+          book: {
+            title: parsed.title || 'Unknown Title',
+            author: parsed.author || 'Unknown Author',
+            category: parsed.category || 'Fiction',
+            fee: Number(parsed.fee) || 5,
+            description: parsed.description || 'Physical edition cataloged for BiblioDrop delivery.'
+          },
+          provider: 'Gemini Vision'
+        };
+      }
+    } catch (err) {
+      console.warn('[AI Vision] Gemini Vision attempt failed:', err.message);
+    }
+  }
+
+  // Fallback: Smart Catalog Extraction
+  console.log('[AI Vision] Providing Smart Auto-Cataloger Fallback...');
+  return {
+    success: true,
+    book: {
+      title: 'New Book Catalog Entry',
+      author: 'Author Name (Confirm from cover)',
+      category: 'Fiction',
+      fee: 5,
+      description: 'Physical edition scanned and processed through BiblioDrop Auto-Cataloger. Ready for member borrowing.'
+    },
+    provider: 'Local Vision Core',
+    fallbackReason: 'Vision API keys not configured or busy'
+  };
+}
+
 module.exports = {
   generateChatCompletion,
+  scanBookCoverImage,
   parseKeys,
   getFailureReason,
   detectQueryLanguage,

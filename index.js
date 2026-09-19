@@ -1180,7 +1180,9 @@ app.post("/api/ai/scan-cover", async (req, res) => {
 
         res.json({
             success: true,
-            data: result
+            book: result.book,
+            provider: result.provider,
+            fallbackReason: result.fallbackReason
         });
     } catch (error) {
         console.error("AI Book Cover Scanner Error:", error);
