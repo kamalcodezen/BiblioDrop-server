@@ -75,3 +75,33 @@ biblioDrop-server/
 - Collection extraction arrays inject direct database document context schemas into `req.db`.
 - Private request paths validate through strict middleware steps. Custom access keys split bearer data strings, check token collections, convert active IDs into validated database Hex instances, and lock valid data variables onto `req.user`.
 - Administrative stats routing engines execute advanced metric computation steps, mapping total cash flows and count arrays into clean UI charting configurations (Recharts friendly layouts).
+
+## 9. Resilient Multi-Provider AI Architecture & Real-World Solvers
+
+BiblioDrop Server integrates a production-hardened, multi-provider AI engine ([aiService.js](file:///c:/Coding-Projects/projects/BiblioDrop-server/aiService.js)) architected to solve real-world cataloging bottlenecks, reader decision hesitation, and continuous customer support without single-point-of-failure vulnerabilities.
+
+### Architectural Pillars of the AI Engine
+
+1. **Zero-Downtime Fallback Cascade:**
+   - Sequential automatic failover: `Groq` (ultra-fast inference) ➔ `OpenRouter` (DeepSeek/Meta) ➔ `Google Gemini 3.6 Flash` (multimodal & reasoning) ➔ `Mistral AI` ➔ `Local Knowledge/Semantic Core`.
+   - If any provider encounters a rate limit (HTTP 429), quota exhaustion, or temporary latency, the pipeline instantly delegates to the subsequent provider without dropping the user's connection.
+
+2. **Self-Healing JSON Parser (`extractJSONFromText`):**
+   - Strips extraneous markdown code fences (```json).
+   - Features automated syntax recovery: automatically balances open quotes, unclosed square brackets (`]`), and curly braces (`}`), ensuring malformed or truncated responses never crash the Express JSON serializer.
+
+3. **Strict Structured JSON Mode & Token Budgeting:**
+   - Groq & OpenRouter execute with `response_format: { type: "json_object" }`.
+   - Google Gemini executes with `responseMimeType: "application/json"` with a 1,200 token budget to accommodate model reasoning/thought tokens.
+   - Semantic queries are strictly budgeted to ~80 output tokens, ensuring high-frequency requests never breach provider token quotas (e.g. Groq 1,000 OTPM).
+
+---
+
+### Core AI Endpoints & Real-World Problem Mapping
+
+| Endpoint | Target User | Real-World Problem Solved | Technology Stack |
+| :--- | :--- | :--- | :--- |
+| `POST /api/ai/chat` | **Borrowers / Readers** | Repetitive borrower inquiries about loan periods (14-day rules), return logistics, and delivery charges leading to request abandonment. | Multi-Provider Chat Engine with conversation memory & deterministic fallback |
+| `POST /api/ai/scan-cover` | **Librarians / Owners** | Manual data entry of Title, Author, Category, Description, and Fee taking 4–5 minutes per book, causing cataloging fatigue and spelling errors. | Multimodal Vision AI (`Gemini Vision` / `Groq Vision` / `OpenRouter Vision`) |
+| `POST /api/ai/book-insights` | **Borrowers / Readers** | Reader hesitation and post-borrow regret caused by generic back-cover blurbs that don't explain reading pace or audience suitability. | Structured Decision Extraction (3 Bullets, Audience Match, Vibe & Pace, Verdict) |
+| `POST /api/ai/semantic-search` | **Borrowers / Readers** | Standard regex search returning 0 results when readers search by emotional vibe (e.g. *"late night atmospheric thriller"*). | Catalog Semantic Discovery with custom English 1-sentence `matchReason` generation |
