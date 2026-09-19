@@ -660,7 +660,161 @@ async function scanBookCoverImage({ imageBase64, base64Data, image, mimeType = '
   };
 }
 
+
+/**
+ * Generates literary reader insights ("Should I Read This?") for readers on BookDetails page
+ * Uses cascade: Groq -> OpenRouter -> Gemini -> Mistral -> Local Smart Fallback
+ */
+async function generateBookInsights({ title, author, category, description }) {
+  const bookTitle = title || 'Untitled Book';
+  const bookAuthor = author || 'Unknown Author';
+  const bookCategory = category || 'General';
+  const bookDesc = description || 'A notable physical edition in the BiblioDrop catalog.';
+
+  const prompt = `You are an expert literary curator and reading advisor for BiblioDrop (a doorstep library platform).
+Analyze this book to help a reader decide if they should borrow it:
+Title: "${bookTitle}"
+Author: "${bookAuthor}"
+Category: "${bookCategory}"
+Synopsis: "${bookDesc}"
+
+Provide an insightful, engaging, and strictly spoiler-free analysis.
+Return ONLY a valid JSON object matching this exact structure with no surrounding markdown backticks:
+{
+  "bullets": [
+    "First key takeaway or central theme (strictly spoiler-free)",
+    "Second key takeaway or central theme (strictly spoiler-free)",
+    "Third key takeaway or central theme (strictly spoiler-free)"
+  ],
+  "targetAudience": {
+    "perfectFor": "Specific type of reader who will love this book",
+    "skipIf": "When a reader might prefer to pick another book"
+  },
+  "readingVibe": {
+    "pace": "Fast-Paced | Moderate | Reflective & Slow-Burn",
+    "difficulty": "Easy & Accessible | Balanced & Engaging | Intellectually Dense",
+    "estimatedDays": "e.g. 3-5 days (approx 30 mins/day)",
+    "tone": "e.g. Inspiring, Dark & Atmospheric, Philosophical, Humorous"
+  },
+  "verdict": "A compelling 1-sentence bottom-line recommendation."
+}`;
+
+  const messages = [{ role: 'user', content: prompt }];
+  const systemPrompt = 'You are BiblioAI Book Insights Engine. You evaluate physical books for readers with objective, spoiler-free literary insights. Always respond strictly in valid JSON.';
+
+  const providers = [
+    {
+      name: 'Groq',
+      keys: parseKeys(process.env.GROQ_API_KEY),
+      call: (apiKey) =>
+        callOpenAICompatible({
+          url: 'https://api.groq.com/openai/v1/chat/completions',
+          apiKey,
+          model: 'qwen/qwen3.8-27b',
+          messages,
+          systemPrompt,
+          temperature: 0.2,
+          maxTokens: 700,
+        }),
+    },
+    {
+      name: 'OpenRouter',
+      keys: parseKeys(process.env.OPENROUTER_API_KEY),
+      call: (apiKey) =>
+        callOpenAICompatible({
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          apiKey,
+          model: 'deepseek/deepseek-v4-flash-0731:free',
+          messages,
+          systemPrompt,
+          temperature: 0.2,
+          maxTokens: 700,
+        }),
+    },
+    {
+      name: 'Gemini',
+      keys: parseKeys(process.env.GEMINI_API_KEY),
+      call: (apiKey) =>
+        callGemini({
+          apiKey,
+          messages,
+          systemPrompt,
+          model: 'gemini-3.6-flash',
+        }),
+    },
+    {
+      name: 'Mistral',
+      keys: parseKeys(process.env.MISTRAL_API_KEY),
+      call: (apiKey) =>
+        callOpenAICompatible({
+          url: 'https://api.mistral.ai/v1/chat/completions',
+          apiKey,
+          model: 'mistral-small-latest',
+          messages,
+          systemPrompt,
+          temperature: 0.2,
+          maxTokens: 700,
+        }),
+    },
+  ];
+
+  const fallbackChain = [];
+
+  for (const provider of providers) {
+    if (!provider.keys || provider.keys.length === 0) continue;
+
+    for (let i = 0; i < provider.keys.length; i++) {
+      const apiKey = provider.keys[i];
+      try {
+        console.log(`[AI Insights] Attempting ${provider.name}...`);
+        const rawText = await provider.call(apiKey);
+        if (rawText) {
+          const parsed = extractJSONFromText(rawText);
+          if (parsed && parsed.bullets && parsed.targetAudience && parsed.readingVibe) {
+            return {
+              success: true,
+              insights: parsed,
+              provider: provider.name,
+              fallbackChain: fallbackChain.concat({ provider: provider.name, status: 'success' }),
+            };
+          }
+        }
+      } catch (err) {
+        console.warn(`[AI Insights] ${provider.name} failed:`, err.message);
+        fallbackChain.push({ provider: provider.name, status: 'failed', reason: err.message });
+      }
+    }
+  }
+
+  // Offline zero-downtime smart fallback
+  console.log('[AI Insights] Cascading to Local Smart Insights Fallback...');
+  return {
+    success: true,
+    insights: {
+      bullets: [
+        `Core exploration centered around ${bookCategory.toLowerCase()} themes.`,
+        `Engaging narrative and character development by ${bookAuthor}.`,
+        'Thought-provoking ideas designed for readers seeking meaningful takeaways.'
+      ],
+      targetAudience: {
+        perfectFor: `Readers enthusiastic about ${bookCategory} and well-crafted storytelling.`,
+        skipIf: `If you are currently looking for a completely different genre outside of ${bookCategory}.`
+      },
+      readingVibe: {
+        pace: 'Moderate & Engaging',
+        difficulty: 'Balanced & Accessible',
+        estimatedDays: '4-7 days (approx 30 mins/day)',
+        tone: 'Thought-provoking'
+      },
+      verdict: `${bookTitle} is a worthwhile physical edition to borrow and explore from the BiblioDrop catalog.`
+    },
+    provider: 'Local Insights Core',
+    fallbackChain: fallbackChain.concat({ provider: 'Local Insights Core', status: 'success' }),
+  };
+}
+
 module.exports = {
+  generateBookInsights,
   generateChatCompletion,
   scanBookCoverImage,
   parseKeys,

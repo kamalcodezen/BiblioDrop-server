@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require("dotenv");
 const nodemailer = require("nodemailer");
-const { generateChatCompletion, scanBookCoverImage } = require('./aiService');
+const { generateChatCompletion, scanBookCoverImage, generateBookInsights } = require('./aiService');
 
 dotenv.config();
 
@@ -1188,6 +1188,40 @@ app.post("/api/ai/scan-cover", async (req, res) => {
         console.error("AI Book Cover Scanner Error:", error);
         res.status(500).json({
             error: "Failed to scan book cover",
+            details: error.message
+        });
+    }
+});
+
+
+// ==========================================
+// 🧠 AI Book Reader Insights Endpoint ("Should I Read This?")
+// ==========================================
+app.post("/api/ai/book-insights", async (req, res) => {
+    try {
+        const { title, author, category, description } = req.body;
+
+        if (!title && !description) {
+            return res.status(400).json({ error: "Book title or description is required for insights" });
+        }
+
+        const result = await generateBookInsights({
+            title,
+            author,
+            category,
+            description
+        });
+
+        res.json({
+            success: true,
+            insights: result.insights,
+            provider: result.provider,
+            fallbackChain: result.fallbackChain
+        });
+    } catch (error) {
+        console.error("AI Book Insights Error:", error);
+        res.status(500).json({
+            error: "Failed to generate book insights",
             details: error.message
         });
     }
