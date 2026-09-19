@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require("dotenv");
 const nodemailer = require("nodemailer");
-const { generateChatCompletion, scanBookCoverImage, generateBookInsights } = require('./aiService');
+const { generateChatCompletion, scanBookCoverImage, generateBookInsights, performSemanticMoodSearch } = require('./aiService');
 
 dotenv.config();
 
@@ -1222,6 +1222,71 @@ app.post("/api/ai/book-insights", async (req, res) => {
         console.error("AI Book Insights Error:", error);
         res.status(500).json({
             error: "Failed to generate book insights",
+            details: error.message
+        });
+    }
+});
+
+
+// ==========================================
+// 🔍 AI Semantic & Mood Search Endpoint
+// ==========================================
+app.post("/api/ai/semantic-search", async (req, res) => {
+    try {
+        const { query } = req.body;
+
+        if (!query || query.trim() === "") {
+            return res.status(400).json({ error: "Search query is required" });
+        }
+
+        // Fetch published books from MongoDB
+        const allBooks = await req.db.books
+            .find({ status: { $in: ["Published", "Checked Out"] } })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        const searchResult = await performSemanticMoodSearch({
+            query,
+            catalog: allBooks
+        });
+
+        if (!searchResult.success || !searchResult.matches) {
+            return res.json({
+                success: true,
+                query,
+                moodDetected: searchResult.moodDetected || "Discovered",
+                books: allBooks.slice(0, 8),
+                provider: searchResult.provider || "Fallback"
+            });
+        }
+
+        // Map match reasons back to full book objects
+        const booksMap = new Map();
+        allBooks.forEach(b => booksMap.set(b._id.toString(), b));
+
+        const matchedBooks = [];
+        for (const match of searchResult.matches) {
+            const book = booksMap.get(match.id?.toString());
+            if (book) {
+                matchedBooks.push({
+                    ...book,
+                    matchReason: match.matchReason,
+                    relevanceScore: match.relevanceScore || 90
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            query,
+            moodDetected: searchResult.moodDetected,
+            books: matchedBooks,
+            provider: searchResult.provider
+        });
+    } catch (error) {
+        console.error("AI Semantic Search Error:", error);
+        res.status(500).json({
+            error: "Failed to perform semantic search",
             details: error.message
         });
     }

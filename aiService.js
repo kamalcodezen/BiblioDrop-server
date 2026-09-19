@@ -44,7 +44,7 @@ function getFailureReason(err) {
   return 'Provider Error';
 }
 
-async function callOpenAICompatible({ url, apiKey, model, messages, systemPrompt, temperature = 0.7, maxTokens = 800 }) {
+async function callOpenAICompatible({ url, apiKey, model, messages, systemPrompt, temperature = 0.7, maxTokens = 800, jsonMode = false }) {
   const formattedMessages = [];
   if (systemPrompt) {
     formattedMessages.push({ role: 'system', content: systemPrompt });
@@ -57,7 +57,18 @@ async function callOpenAICompatible({ url, apiKey, model, messages, systemPrompt
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 14000);
+  const timeoutId = setTimeout(() => controller.abort(), 28000);
+
+  const payload = {
+    model,
+    messages: formattedMessages,
+    temperature,
+    max_tokens: maxTokens,
+  };
+
+  if (jsonMode) {
+    payload.response_format = { type: 'json_object' };
+  }
 
   try {
     const response = await fetch(url, {
@@ -66,12 +77,7 @@ async function callOpenAICompatible({ url, apiKey, model, messages, systemPrompt
         'Content-Type': 'application/json',
         Authorization: 'Bearer ' + apiKey,
       },
-      body: JSON.stringify({
-        model,
-        messages: formattedMessages,
-        temperature,
-        max_tokens: maxTokens,
-      }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
 
@@ -87,9 +93,7 @@ async function callOpenAICompatible({ url, apiKey, model, messages, systemPrompt
   }
 }
 
-async function callGemini({ apiKey, messages, systemPrompt, model = 'gemini-3.6-flash' }) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
-
+async function callGemini({ apiKey, messages, systemPrompt, model = 'gemini-3.6-flash', jsonMode = false, maxTokens = 1200 }) {
   const contents = [];
   for (const m of messages) {
     contents.push({
@@ -101,8 +105,9 @@ async function callGemini({ apiKey, messages, systemPrompt, model = 'gemini-3.6-
   const body = {
     contents,
     generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 800,
+      temperature: 0.2,
+      maxOutputTokens: maxTokens,
+      ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
     },
   };
 
@@ -112,35 +117,45 @@ async function callGemini({ apiKey, messages, systemPrompt, model = 'gemini-3.6-
     };
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 14000);
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error('HTTP ' + response.status + ': ' + errorText);
+  const makeAttempt = async (targetModel) => {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + targetModel + ':generateContent?key=' + apiKey;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 22000);
+    try {
+      return await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
+  };
 
-    const data = await response.json();
-    const candidate = data.candidates?.[0];
-    const textPart = candidate?.content?.parts?.[0]?.text;
-    if (!textPart) {
-      throw new Error('Gemini returned an empty candidate response');
-    }
-    return textPart;
-  } finally {
-    clearTimeout(timeoutId);
+  let response = await makeAttempt(model);
+
+  // If 503 (temporary capacity spike), wait 1.2s and retry once
+  if (response.status === 503) {
+    console.log('[Gemini] Received 503 capacity spike, auto-retrying in 1.2s...');
+    await new Promise((r) => setTimeout(r, 1200));
+    response = await makeAttempt(model);
   }
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error('Gemini HTTP ' + response.status + ': ' + errText);
+  }
+
+  const data = await response.json();
+  const rawCandidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawCandidate) {
+    throw new Error('Gemini candidate returned empty response');
+  }
+
+  return rawCandidate;
 }
 
-// Detect language style: 'bangla' | 'banglish' | 'english'
 function detectQueryLanguage(text) {
   if (!text) return 'english';
   // Check for Bengali Unicode script characters
@@ -313,6 +328,7 @@ async function generateChatCompletion({ messages, systemPrompt, catalogContext =
           model: 'qwen/qwen3.8-27b',
           messages,
           systemPrompt: enhancedSystemPrompt,
+          maxTokens: 450,
         }),
     },
     {
@@ -416,20 +432,62 @@ async function generateChatCompletion({ messages, systemPrompt, catalogContext =
 function extractJSONFromText(text) {
   if (!text) throw new Error('Empty AI response');
   let clean = text.trim();
-  
-  // First attempt regex match for outermost JSON object
-  const match = clean.match(/\{[\s\S]*\}/);
-  if (match) {
+
+  // Strip code fences
+  clean = clean.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  // 1. Direct JSON parse
+  try {
+    return JSON.parse(clean);
+  } catch (e1) {
+    // 2. Outermost JSON object via regex
+    const match = clean.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (e2) {
+        // Fall through to auto-repair
+      }
+    }
+
+    // 3. Auto-repair truncated JSON
     try {
-      return JSON.parse(match[0]);
-    } catch (err) {
-      console.warn('Regex match failed to parse, falling back to clean string');
+      let repaired = clean;
+      const firstBrace = repaired.indexOf('{');
+      if (firstBrace !== -1) {
+        repaired = repaired.substring(firstBrace);
+      }
+
+      // Close open quotes
+      const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
+      if (quoteCount % 2 !== 0) {
+        repaired += '"';
+      }
+
+      // Trim trailing commas
+      repaired = repaired.replace(/,\s*$/, '');
+
+      // Balance brackets
+      const openBrackets = (repaired.match(/\[/g) || []).length;
+      const closeBrackets = (repaired.match(/\]/g) || []).length;
+      if (openBrackets > closeBrackets) {
+        repaired += ']'.repeat(openBrackets - closeBrackets);
+      }
+
+      repaired = repaired.replace(/,\s*$/, '');
+
+      // Balance braces
+      const openBraces = (repaired.match(/\{/g) || []).length;
+      const closeBraces = (repaired.match(/\}/g) || []).length;
+      if (openBraces > closeBraces) {
+        repaired += '}'.repeat(openBraces - closeBraces);
+      }
+
+      return JSON.parse(repaired);
+    } catch (e3) {
+      throw new Error('Could not parse AI response as JSON: ' + clean.substring(0, 150));
     }
   }
-
-  // Clean code fences
-  clean = clean.replace(/\`\`\`json/gi, '').replace(/\`\`\`/g, '').trim();
-  return JSON.parse(clean);
 }
 
 async function scanBookCoverImage({ imageBase64, base64Data, image, mimeType = 'image/jpeg' }) {
@@ -714,7 +772,7 @@ Return ONLY a valid JSON object matching this exact structure with no surroundin
           messages,
           systemPrompt,
           temperature: 0.2,
-          maxTokens: 700,
+          maxTokens: 420,
         }),
     },
     {
@@ -813,7 +871,159 @@ Return ONLY a valid JSON object matching this exact structure with no surroundin
   };
 }
 
+
+/**
+ * Performs natural language semantic & mood-based book discovery
+ * Uses cascade: Groq -> OpenRouter -> Gemini -> Mistral -> Local Fallback
+ */
+async function performSemanticMoodSearch({ query, catalog = [] }) {
+  const userQuery = (query || '').trim();
+  if (!userQuery) {
+    return { success: false, error: 'Query is required' };
+  }
+
+  const catalogSample = catalog.slice(0, 20).map((b) => ({
+    id: b._id ? b._id.toString() : b.id,
+    title: b.title || 'Untitled',
+    author: b.author || 'Unknown',
+    category: b.category || 'General',
+    description: (b.description || '').substring(0, 110)
+  }));
+
+  const prompt = `You are the English AI Semantic Search Engine for BiblioDrop.
+User Query: "${userQuery}"
+Catalog: ${JSON.stringify(catalogSample)}
+
+Instructions:
+- The search query and your response must be strictly in English.
+- Return top 1 to 4 best matching books from the catalog.
+- Keep each matchReason very brief (1 concise sentence, maximum 15 words).
+
+Return ONLY valid JSON matching this exact format with NO markdown backticks:
+{
+  "moodDetected": "Short 2-3 word vibe in English",
+  "matches": [
+    { "id": "book id from catalog", "matchReason": "Concise reason under 15 words in English" }
+  ]
+}`;
+
+  const messages = [{ role: 'user', content: prompt }];
+  const systemPrompt = 'You are BiblioAI Semantic Search Engine. Always respond strictly in valid JSON in English. Do not output markdown code blocks or explanations.';
+
+  const providers = [
+    {
+      name: 'Groq',
+      keys: parseKeys(process.env.GROQ_API_KEY),
+      call: (apiKey) =>
+        callOpenAICompatible({
+          url: 'https://api.groq.com/openai/v1/chat/completions',
+          apiKey,
+          model: 'qwen/qwen3.8-27b',
+          messages,
+          systemPrompt,
+          temperature: 0.1,
+          maxTokens: 350,
+          jsonMode: true,
+        }),
+    },
+    {
+      name: 'OpenRouter',
+      keys: parseKeys(process.env.OPENROUTER_API_KEY),
+      call: (apiKey) =>
+        callOpenAICompatible({
+          url: 'https://openrouter.ai/api/v1/chat/completions',
+          apiKey,
+          model: 'deepseek/deepseek-v4-flash-0731:free',
+          messages,
+          systemPrompt,
+          temperature: 0.1,
+          maxTokens: 350,
+          jsonMode: true,
+        }),
+    },
+    {
+      name: 'Gemini',
+      keys: parseKeys(process.env.GEMINI_API_KEY),
+      call: (apiKey) =>
+        callGemini({
+          apiKey,
+          messages,
+          systemPrompt,
+          model: 'gemini-3.6-flash',
+          jsonMode: true,
+          maxTokens: 1200,
+        }),
+    },
+    {
+      name: 'Mistral',
+      keys: parseKeys(process.env.MISTRAL_API_KEY),
+      call: (apiKey) =>
+        callOpenAICompatible({
+          url: 'https://api.mistral.ai/v1/chat/completions',
+          apiKey,
+          model: 'mistral-small-latest',
+          messages,
+          systemPrompt,
+          temperature: 0.1,
+          maxTokens: 350,
+        }),
+    },
+  ];
+
+  for (const provider of providers) {
+    if (!provider.keys || provider.keys.length === 0) continue;
+    for (let i = 0; i < provider.keys.length; i++) {
+      const apiKey = provider.keys[i];
+      try {
+        console.log(`[AI Semantic Search] Attempting ${provider.name}...`);
+        const raw = await provider.call(apiKey);
+        if (raw) {
+          const parsed = extractJSONFromText(raw);
+          if (parsed && Array.isArray(parsed.matches)) {
+            return {
+              success: true,
+              moodDetected: parsed.moodDetected || 'Discovered Vibe',
+              matches: parsed.matches,
+              provider: provider.name
+            };
+          }
+        }
+      } catch (err) {
+        console.warn(`[AI Semantic Search] ${provider.name} failed:`, err.message);
+      }
+    }
+  }
+
+  // Local fallback heuristic (English only)
+  console.log('[AI Semantic Search] Using local heuristic fallback...');
+  const lowerQuery = userQuery.toLowerCase();
+  const localMatches = catalogSample
+    .filter((b) =>
+      b.title.toLowerCase().includes(lowerQuery) ||
+      b.category.toLowerCase().includes(lowerQuery) ||
+      b.description.toLowerCase().includes(lowerQuery)
+    )
+    .slice(0, 4)
+    .map((b, idx) => ({
+      id: b.id,
+      matchReason: `Thematic match with ${b.category} aligning with your requested vibe.`,
+      relevanceScore: 92 - idx * 4
+    }));
+
+  return {
+    success: true,
+    moodDetected: 'Discovered Selection',
+    matches: localMatches.length > 0 ? localMatches : catalogSample.slice(0, 4).map((b) => ({
+      id: b.id,
+      matchReason: `Recommended title from our ${b.category} collection.`,
+      relevanceScore: 85
+    })),
+    provider: 'Local Semantic Core'
+  };
+}
+
 module.exports = {
+  performSemanticMoodSearch,
   generateBookInsights,
   generateChatCompletion,
   scanBookCoverImage,
